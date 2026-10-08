@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Road Surface Condition Detection</title>
+<style>
+  :root {
+    --asphalt: #1c1d21;
+    --asphalt-2: #26282e;
+    --card: #2d3038;
+    --line: #f5c400;
+    --text: #f2f2f0;
+    --muted: #a9abb3;
+    --good: #22c55e;
+    --bad: #ef4444;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(circle at 20% 10%, rgba(255,255,255,.04), transparent 40%),
+      repeating-linear-gradient(45deg, rgba(255,255,255,.012) 0 2px, transparent 2px 6px),
+      var(--asphalt);
+    min-height: 100vh;
+  }
+  /* Dashed centre line running down the page */
+  body::before {
+    content: ""; position: fixed; left: 50%; top: 0; bottom: 0; width: 6px; transform: translateX(-50%);
+    background: repeating-linear-gradient(to bottom, var(--line) 0 40px, transparent 40px 80px);
+    opacity: .07; pointer-events: none; z-index: 0;
+  }
+  .wrap { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 28px 16px 48px; }
+  header { text-align: center; margin-bottom: 24px; }
+  header h1 { margin: 0 0 6px; font-size: clamp(1.5rem, 4vw, 2.2rem); letter-spacing: -.02em; }
+  header h1 span { color: var(--line); }
+  header p { margin: 0; color: var(--muted); }
+  .status { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 6px 12px;
+            border-radius: 999px; background: var(--asphalt-2); font-size: .85rem; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--good); } .dot.warn { background: var(--line); } .dot.err { background: var(--bad); }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: var(--card); border-radius: var(--radius); padding: 20px;
+          box-shadow: 0 10px 30px rgba(0,0,0,.35); border-top: 4px solid var(--line); }
+  .card h2 { margin: 0 0 14px; font-size: 1.05rem; color: var(--muted); font-weight: 600;
+             text-transform: uppercase; letter-spacing: .08em; }
+
+  .drop { border: 2px dashed #555a66; border-radius: 12px; min-height: 240px; display: flex;
+          flex-direction: column; align-items: center; justify-content: center; text-align: center;
+          padding: 16px; cursor: pointer; transition: border-color .2s, background .2s; overflow: hidden; }
+  .drop:hover, .drop.over { border-color: var(--line); background: rgba(245,196,0,.05); }
+  .drop svg { width: 48px; height: 48px; color: var(--line); margin-bottom: 8px; }
+  .drop small { color: var(--muted); }
+  .drop img { max-width: 100%; max-height: 320px; border-radius: 8px; display: block; }
+  .filename { color: var(--muted); font-size: .85rem; margin-top: 8px; word-break: break-all; }
+
+  button { width: 100%; margin-top: 16px; padding: 14px; font-size: 1rem; font-weight: 700; border: 0;
+           border-radius: 12px; cursor: pointer; color: #1c1d21; background: var(--line);
+           display: flex; align-items: center; justify-content: center; gap: 10px; transition: transform .1s, opacity .2s; }
+  button:active { transform: scale(.98); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .spinner { width: 18px; height: 18px; border: 3px solid rgba(0,0,0,.25); border-top-color: #1c1d21;
+             border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .placeholder { color: var(--muted); text-align: center; padding: 60px 10px; }
+  .label { display: inline-block; font-size: 1.6rem; font-weight: 800; padding: 6px 16px; border-radius: 10px;
+           text-transform: capitalize; }
+  .label.good { background: rgba(34,197,94,.15); color: var(--good); }
+  .label.bad  { background: rgba(239,68,68,.15); color: var(--bad); }
+  .conf { margin: 10px 0 18px; color: var(--muted); }
+  .conf b { color: var(--text); font-size: 1.15rem; }
+  .bar-row { margin-bottom: 12px; }
+  .bar-row .top { display: flex; justify-content: space-between; font-size: .9rem; margin-bottom: 4px; text-transform: capitalize; }
+  .bar { height: 10px; background: var(--asphalt-2); border-radius: 999px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 999px; width: 0; transition: width .6s ease; }
+  .advice { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: var(--asphalt-2);
+            border-left: 4px solid var(--line); line-height: 1.45; }
+  .heatmap { margin-top: 18px; }
+  .heatmap img { width: 100%; border-radius: 10px; display: block; }
+  .heatmap p { color: var(--muted); font-size: .85rem; margin: 6px 0 0; }
+  .error { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: rgba(239,68,68,.12);
+           color: #fca5a5; border-left: 4px solid var(--bad); line-height: 1.45; }
+  .error code { background: rgba(0,0,0,.3); padding: 2px 6px; border-radius: 4px; color: var(--text); }
+  footer { text-align: center; color: var(--muted); font-size: .8rem; margin-top: 28px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Road Surface <span>Condition</span> Detection</h1>
+    <p>Upload a road photo — a CNN classifies it as normal or pothole and shows where it looked.</p>
+    <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Checking backend…</span></div>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1 · Upload photo</h2>
+      <label class="drop" id="drop" for="fileInput">
+        <div id="dropContent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>
+          </svg>
+          <div><b>Drag &amp; drop</b> a road photo here</div>
+          <small>or click / tap to choose · JPG, PNG</small>
+        </div>
+      </label>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+      <div class="filename" id="filename"></div>
+      <button id="analyseBtn" disabled><span id="btnText">Analyse road</span></button>
+      <div id="error" class="error" hidden></div>
+    </section>
+
+    <section class="card">
+      <h2>2 · Result</h2>
+      <div id="placeholder" class="placeholder">Your result will appear here.</div>
+      <div id="result" hidden>
+        <span class="label" id="label"></span>
+        <div class="conf">Confidence: <b id="confidence"></b></div>
+        <div id="bars"></div>
+        <div class="advice" id="advice"></div>
+        <div class="heatmap" id="heatmapBox" hidden>
+          <img id="heatmap" alt="Grad-CAM heatmap">
+          <p>Grad-CAM: red/yellow areas influenced the decision the most.</p>
+        </div>
+        <p class="filename" id="noHeatmap" hidden>Grad-CAM heatmap not available (custom CNN model not found in models/).</p>
+      </div>
+    </section>
+  </div>
+
+  <footer>Road Surface Condition Detection Using CNN · MobileNetV2 + Custom CNN (Grad-CAM)</footer>
+</div>
+
+<script>
+  // Same origin when served by FastAPI; fall back to the default local server if opened as a file
+  const API = location.protocol.startsWith("http") ? "" : "http://127.0.0.1:8000";
+  const START_HINT = 'Start it from the project folder with <code>uvicorn backend.app:app --reload</code>.';
+
+  const $ = id => document.getElementById(id);
+  const fileInput = $("fileInput"), drop = $("drop"), btn = $("analyseBtn");
+  let selectedFile = null;
+
+  function showError(html) { $("error").innerHTML = html; $("error").hidden = false; }
+  function clearError() { $("error").hidden = true; }
+  function setStatus(kind, text) { $("statusDot").className = "dot " + kind; $("statusText").textContent = text; }
+
+  async function checkHealth() {
+    try {
+      const r = await fetch(API + "/api/health");
+      const h = await r.json();
+      if (h.model_loaded) setStatus("ok", "Backend online · Grad-CAM " + (h.gradcam_available ? "on" : "off"));
+      else { setStatus("warn", "Backend online · model missing"); showError(h.message || "Model not loaded."); }
+    } catch {
+      setStatus("err", "Backend offline");
+    }
+  }
+
+  function pickFile(file) {
+    clearError();
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { showError("That file isn't an image. Please choose a JPG or PNG road photo."); return; }
+    selectedFile = file;
+    const url = URL.createObjectURL(file);
+    $("dropContent").innerHTML = `<img src="${url}" alt="Selected road photo">`;
+    $("filename").textContent = file.name;
+    btn.disabled = false;
+  }
+
+  fileInput.addEventListener("change", e => pickFile(e.target.files[0]));
+  ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => pickFile(e.dataTransfer.files[0]));
+
+  btn.addEventListener("click", async () => {
+    if (!selectedFile) return;
+    clearError();
+    btn.disabled = true;
+    $("btnText").textContent = "Analysing…";
+    btn.insertAdjacentHTML("afterbegin", '<span class="spinner" id="spinner"></span>');
+
+    const form = new FormData();
+    form.append("file", selectedFile);
+    try {
+      const r = await fetch(API + "/api/predict", { method: "POST", body: form });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw { server: true, msg: data.detail || `Server error (${r.status})` };
+      renderResult(data);
+    } catch (err) {
+      if (err.server) showError(err.msg);
+      else { setStatus("err", "Backend offline"); showError("Can't reach the backend — is the server running? " + START_HINT); }
+    } finally {
+      $("spinner")?.remove();
+      $("btnText").textContent = "Analyse road";
+      btn.disabled = false;
+    }
+  });
+
+  function renderResult(d) {
+    $("placeholder").hidden = true;
+    $("result").hidden = false;
+    const label = $("label");
+    label.textContent = d.is_pothole ? "⚠ " + d.label : "✓ " + d.label;
+    label.className = "label " + (d.is_pothole ? "bad" : "good");
+    $("confidence").textContent = (d.confidence * 100).toFixed(1) + "%";
+
+    const bars = $("bars");
+    bars.innerHTML = "";
+    for (const [name, p] of Object.entries(d.probabilities)) {
+      const color = name.toLowerCase().includes("pothole") ? "var(--bad)" : "var(--good)";
+      bars.insertAdjacentHTML("beforeend", `
+        <div class="bar-row">
+          <div class="top"><span>${name}</span><span>${(p * 100).toFixed(1)}%</span></div>
+          <div class="bar"><div style="background:${color}" data-w="${p * 100}"></div></div>
+        </div>`);
+    }
+    requestAnimationFrame(() => bars.querySelectorAll("[data-w]").forEach(b => b.style.width = b.dataset.w + "%"));
+
+    $("advice").textContent = d.advice;
+    $("heatmapBox").hidden = !d.gradcam;
+    $("noHeatmap").hidden = !!d.gradcam;
+    if (d.gradcam) $("heatmap").src = d.gradcam;
+  }
+
+  checkHealth();
+</script>
+</body>
+</html>

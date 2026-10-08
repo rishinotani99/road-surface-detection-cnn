@@ -1,0 +1,19 @@
+# Python / virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+
+# Local dataset copies (if the notebook is ever run locally)
+data/
+
+# NOTE: *.keras model files are intentionally NOT ignored — they are committed to models/
