@@ -1,5 +1,7 @@
 # Road Surface Condition Detection Using CNN
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rishinotani99/road-surface-detection-cnn/blob/main/notebooks/Road_Surface_Detection_CNN.ipynb)
+
 A deep-learning system that looks at a road photo and classifies it as **normal** or **pothole**, shows how confident it is, and draws a **Grad-CAM heatmap** of the area the model focused on.
 
 - **Training:** Google Colab (free T4 GPU) — `notebooks/Road_Surface_Detection_CNN.ipynb`
