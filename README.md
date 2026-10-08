@@ -13,19 +13,19 @@ A deep-learning system that looks at a road photo and classifies it as **normal*
 
 ```
 Road photo ──► FastAPI /api/predict ──► MobileNetV2 (transfer learning) ──► label + confidence + probabilities
-                                    └─► Custom CNN (last conv layer) ────► Grad-CAM heatmap overlay (PNG)
-                                                                         │
-Browser (frontend/index.html) ◄──────────────── JSON result ◄────────────┘
+                                                    └─ last feature maps (out_relu) ──► Grad-CAM heatmap overlay (PNG)
+                                                                                        │
+Browser (frontend/index.html) ◄────────────────────── JSON result ◄─────────────────────┘
 ```
 
 1. **Dataset** – the Kaggle *Pothole Detection Dataset* (`atulyakumar98/pothole-detection-dataset`), two classes: `normal` and `potholes`. Downloaded automatically with `kagglehub`; unreadable images are removed.
 2. **Split** – stratified 70% train / 15% validation / 15% test, images resized to 224×224.
 3. **Augmentation** – random flip, rotation, zoom, contrast and brightness (training only).
-4. **Model A – Custom CNN** – 4 conv blocks (Conv → BatchNorm → ReLU → MaxPool), GlobalAveragePooling, Dropout, softmax. Trained from scratch with early stopping.
+4. **Model A – Custom CNN** – 4 conv blocks (Conv → BatchNorm → ReLU → MaxPool), GlobalAveragePooling, Dropout, softmax. Trained from scratch with early stopping, followed by a sanity check that warns if it only learned to predict one class.
 5. **Model B – MobileNetV2** – ImageNet-pretrained base frozen while a new head is trained, then the top ~30 layers are fine-tuned with a low learning rate.
 6. **Evaluation** – test accuracy, classification report, confusion matrix and a comparison chart.
-7. **Explainability** – Grad-CAM on the custom CNN's last conv layer highlights the image regions behind each decision.
-8. **Deployment** – the backend uses MobileNetV2 (usually the more accurate model) for the prediction and the custom CNN for the heatmap.
+7. **Explainability** – Grad-CAM highlights the image regions behind each decision. The notebook shows it for both models: the custom CNN's `last_conv` layer and MobileNetV2's `out_relu` feature maps.
+8. **Deployment** – the backend uses MobileNetV2 (the more accurate model) both for the prediction and for the Grad-CAM heatmap, so the heatmap always explains the label shown. The custom CNN is the from-scratch baseline used for the comparison in the notebook.
 
 ## Folder structure
 
@@ -62,10 +62,12 @@ Move the three downloaded files into the `models/` folder:
 
 ```
 models/
-├── road_surface_mobilenetv2.keras   # required — prediction
-├── road_surface_custom_cnn.keras    # optional — Grad-CAM heatmap (skipped if missing)
+├── road_surface_mobilenetv2.keras   # required — prediction + Grad-CAM heatmap
+├── road_surface_custom_cnn.keras    # baseline model from the comparison (not used by the app)
 └── classes.json                     # class names in order, e.g. ["normal", "potholes"]
 ```
+
+If `classes.json` is missing, the app falls back to `["normal", "potholes"]`.
 
 Then commit them so your whole group has them:
 
@@ -145,7 +147,13 @@ and compare with the version printed at the end of the notebook. Install the mat
 Runtime → Change runtime type → **T4 GPU** → Save, then Runtime → Restart and run all. Free GPU time is limited; if none is available, wait a while or train on CPU (it works, just slower — you can reduce epochs).
 
 **Grad-CAM heatmap doesn't appear**
-`models/road_surface_custom_cnn.keras` is missing — the app still predicts but skips the heatmap. Check `/api/health` → `"gradcam_available"`.
+Check `/api/health` → `"gradcam_available"` and the server log at startup (`Grad-CAM uses layer …` or `Grad-CAM disabled — <reason>`). The app still predicts without it. The heatmap is computed from MobileNetV2's `out_relu` layer, so it needs a model built like the one in the notebook.
+
+**Custom CNN accuracy is ~50% / it predicts one class for everything**
+Training collapsed. The notebook prints a ⚠️ warning after section 5 when this happens — re-run the build and train cells of section 5 (and everything after it). The web app isn't affected, since it uses MobileNetV2.
+
+**Server crashes, or "The paging file is too small" when starting**
+TensorFlow needs roughly 1–1.5 GB of free RAM. Close Chrome tabs and other heavy apps, and don't run two TensorFlow processes at once.
 
 **The page says "Backend offline"**
 Start the server from the project root (`uvicorn backend.app:app --reload`) with the venv activated, and open http://127.0.0.1:8000.
